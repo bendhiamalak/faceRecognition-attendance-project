@@ -3,6 +3,9 @@
 This project is an **AI-powered attendance system** that uses **face recognition** to automatically mark student attendance.  
 It leverages **OpenCV, DLIB, and the `face_recognition` library** to detect and identify faces in real-time, logging the arrival time of each student into a CSV file.  
 
+---
+
+##  Demo
 <p align="center">
   <img src="githubmedia/demo.gif" alt="Demo" width="600"/>
 </p>
