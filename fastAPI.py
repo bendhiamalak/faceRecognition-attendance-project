@@ -3,7 +3,7 @@ API REST pour le Système de Gestion de Présence par Reconnaissance Faciale
 Endpoints pour application mobile - FastAPI
 """
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, Form
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from database import AttendanceDatabase
@@ -15,14 +15,23 @@ import cv2
 from datetime import datetime
 import os
 import sqlite3
+from fastapi.staticfiles import StaticFiles
+
+from fastapi.responses import FileResponse
+import mimetypes
 
 # ==================== INITIALISATION ====================
 app = FastAPI(title="Attendance System API - FastAPI")
+base_dir = os.path.dirname(__file__)
+photos_dir = os.path.join(base_dir, "students_photos")
+os.makedirs(photos_dir, exist_ok=True)
 
+app.mount("/students_photos", StaticFiles(directory=photos_dir), name="students_photos")
 # Autoriser CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -115,11 +124,14 @@ async def get_professor(professor_id: int):
 
 @app.post("/api/students")
 async def create_student(student: StudentCreate):
+    print("oyyyyyyyyyy")
+    print(student)
     if not all([student.first_name, student.last_name]):
         raise HTTPException(status_code=400, detail="Le prénom et le nom sont obligatoires")
     
     photo_path = None
     encoding = None
+    print(student)
 
     if student.photo_base64:
         try:
