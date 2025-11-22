@@ -18,6 +18,7 @@ class AttendanceDatabase:
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
             subject TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         
@@ -54,22 +55,42 @@ class AttendanceDatabase:
             UNIQUE(session_id, student_id)
         )''')
         
-        conn.commit()
+        # Assurer l'existence de la colonne email et d'un index UNIQUE (migration pour bases existantes)
+        c.execute("PRAGMA table_info('professors')")
+        cols = [row[1] for row in c.fetchall()]
+        if 'email' not in cols:
+            try:
+                c.execute("ALTER TABLE professors ADD COLUMN email TEXT")
+                conn.commit()
+                print("→ Colonne 'email' ajoutée à la table professors (migration)")
+            except Exception as e:
+                print(f"⚠ Impossible d'ajouter la colonne 'email': {e}")
+        # Créer un index UNIQUE si non présent (permet d'imposer l'unicité sur les valeurs non-null)
+        try:
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_email ON professors(email);")
+            conn.commit()
+        except Exception as e:
+            print(f"⚠ Impossible de créer l'index unique sur email: {e}")
+
         conn.close()
         print("✓ Base de données initialisée avec succès")
     
     # === GESTION PROFESSEURS ===
-    def add_professor(self, first_name, last_name, subject):
+    def add_professor(self, first_name, last_name, subject, email):
         """Ajoute un professeur"""
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
         try:
-            c.execute('''INSERT INTO professors (first_name, last_name, subject)
-                        VALUES (?, ?, ?)''', (first_name, last_name, subject))
+            c.execute('''INSERT INTO professors (first_name, last_name, subject, email)
+                        VALUES (?, ?, ?, ?)''', (first_name, last_name, subject, email))
             conn.commit()
             professor_id = c.lastrowid
             print(f"✓ Professeur {first_name} {last_name} ajouté avec ID: {professor_id}")
             return professor_id
+        except sqlite3.IntegrityError as ie:
+            # Erreur d'unicité (email déjà existant)
+            print(f"✗ Intégrité DB lors de l'ajout du professeur (possible email dupliqué): {ie}")
+            return None
         except Exception as e:
             print(f"✗ Erreur lors de l'ajout du professeur: {e}")
             return None
@@ -84,7 +105,16 @@ class AttendanceDatabase:
         professors = c.fetchall()
         conn.close()
         return professors
-    
+
+    def get_professor_by_email(self, email):
+        """Récupère un professeur par email (ou None)"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute('SELECT * FROM professors WHERE email = ? LIMIT 1', (email,))
+        prof = c.fetchone()
+        conn.close()
+        return prof
+
     # === GESTION ÉTUDIANTS ===
     def add_student(self, first_name, last_name, photo_path=None, encoding=None):
         """Ajoute un étudiant"""

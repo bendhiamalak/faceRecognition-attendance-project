@@ -48,7 +48,7 @@ class ProfessorCreate(BaseModel):
     first_name: str
     last_name: str
     subject: str
-    email: str = None
+    email: str
 
 class StudentCreate(BaseModel):
     first_name: str
@@ -74,9 +74,15 @@ class DetectAttendance(BaseModel):
 
 @app.post("/api/professors")
 async def create_professor(prof: ProfessorCreate):
-    if not all([prof.first_name, prof.last_name, prof.subject]):
+    if not all([prof.first_name, prof.last_name, prof.subject, prof.email]):
         raise HTTPException(status_code=400, detail="Tous les champs sont obligatoires")
-    professor_id = db.add_professor(prof.first_name, prof.last_name, prof.subject)
+
+    # Vérifier si l'email existe déjà
+    existing = db.get_professor_by_email(prof.email)
+    if existing:
+        raise HTTPException(status_code=400, detail="Un professeur avec cet email existe déjà")
+
+    professor_id = db.add_professor(prof.first_name, prof.last_name, prof.subject, prof.email)
     if not professor_id:
         raise HTTPException(status_code=500, detail="Erreur lors de la création du professeur")
     return {
@@ -86,7 +92,8 @@ async def create_professor(prof: ProfessorCreate):
             "professor_id": professor_id,
             "first_name": prof.first_name,
             "last_name": prof.last_name,
-            "subject": prof.subject
+            "subject": prof.subject,
+            "email": prof.email
         }
     }
 
@@ -98,7 +105,8 @@ async def get_professors():
         "first_name": p[1],
         "last_name": p[2],
         "subject": p[3],
-        "created_at": p[4]
+        "email": p[4],
+        "created_at": p[5]
     } for p in professors]
     return {"success": True, "data": professors_list, "count": len(professors_list)}
 
@@ -115,7 +123,8 @@ async def get_professor(professor_id: int):
             "first_name": professor[1],
             "last_name": professor[2],
             "subject": professor[3],
-            "created_at": professor[4]
+            "email": professor[4],
+            "created_at": professor[5]
         }
     }
 
@@ -239,6 +248,31 @@ async def get_student(student_id: int):
             }
         }
     }
+
+@app.get("/api/students/{student_id}/photo")
+async def get_student_photo(student_id: int):
+    """Retourne la photo d'un étudiant (FileResponse)"""
+    conn = sqlite3.connect(db.db_name)
+    c = conn.cursor()
+    c.execute('SELECT photo_path FROM students WHERE id=?', (student_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="Photo introuvable pour cet étudiant")
+    photo_path = row[0]
+
+    # Support des chemins relatifs stockés comme 'students_photos/xxx.jpg'
+    if not os.path.isabs(photo_path):
+        abs_path = os.path.join(base_dir, photo_path)
+    else:
+        abs_path = photo_path
+
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Fichier photo introuvable sur le serveur")
+
+    # Détecter le content-type
+    mime_type, _ = mimetypes.guess_type(abs_path)
+    return FileResponse(abs_path, media_type=mime_type or 'image/jpeg')
 
 
 # ==================== ENDPOINTS SÉANCES ====================

@@ -37,13 +37,20 @@ class AttendanceSystem:
         first_name = input("Prénom: ").strip()
         last_name = input("Nom: ").strip()
         subject = input("Matière enseignée: ").strip()
-        
-        if not first_name or not last_name or not subject:
+        email = input("Email: ").strip()
+
+        if not first_name or not last_name or not subject or not email:
             print("✗ Tous les champs sont obligatoires!")
             return
         
-        professor_id = self.db.add_professor(first_name, last_name, subject)
-        
+        # Vérifier unicité email
+        existing = self.db.get_professor_by_email(email)
+        if existing:
+            print("✗ Un professeur avec cet email existe déjà!")
+            return
+
+        professor_id = self.db.add_professor(first_name, last_name, subject, email)
+
         if professor_id:
             print(f"\n✓ Professeur {first_name} {last_name} inscrit avec succès!")
             print(f"   ID: {professor_id}")
@@ -162,8 +169,9 @@ class AttendanceSystem:
             print(f"\nID: {prof[0]}")
             print(f"  Nom: {prof[1]} {prof[2]}")
             print(f"  Matière: {prof[3]}")
-            print(f"  Inscrit le: {prof[4]}")
-    
+            print(f"  Email: {prof[4]}")
+            print(f"  Inscrit le: {prof[5]}")
+
     def view_students(self):
         """Affiche la liste des étudiants"""
         print("\n👨‍🎓 LISTE DES ÉTUDIANTS")
