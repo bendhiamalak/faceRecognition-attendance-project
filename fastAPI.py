@@ -3,7 +3,7 @@ API REST pour le Système de Gestion de Présence par Reconnaissance Faciale
 Endpoints pour application mobile - FastAPI
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from database import AttendanceDatabase
@@ -213,7 +213,7 @@ async def get_students():
     }
 
 @app.get("/api/students/{student_id}")
-async def get_student(student_id: int):
+async def get_student(student_id: int, request: Request):
     conn = sqlite3.connect(db.db_name)
     c = conn.cursor()
     c.execute('SELECT id, first_name, last_name, photo_path, gender FROM students WHERE id=?', (student_id,))
@@ -231,13 +231,32 @@ async def get_student(student_id: int):
     total_sessions = stats[0] if stats[0] else 0
     attended = stats[1] if stats[1] else 0
     absence_rate = ((total_sessions - attended) / total_sessions * 100) if total_sessions > 0 else 0
+
+    # Construire les URLs utiles pour le front
+    photo_path = student[3]
+    photo_url = None
+    photo_endpoint = f"{str(request.base_url).rstrip('/')}/api/students/{student_id}/photo"
+
+    # Si le chemin stocké est dans le dossier public 'students_photos', construire l'URL publique
+    if photo_path:
+        # normaliser les séparateurs
+        normalized = photo_path.replace('\\', '/')
+        if normalized.startswith('students_photos/'):
+            filename = normalized.split('/', 1)[1]
+            photo_url = f"{str(request.base_url).rstrip('/')}/students_photos/{filename}"
+        elif normalized.startswith('./students_photos/'):
+            filename = normalized.split('/', 2)[2]
+            photo_url = f"{str(request.base_url).rstrip('/')}/students_photos/{filename}"
+
     return {
         "success": True,
         "data": {
             "id": student[0],
             "first_name": student[1],
             "last_name": student[2],
-            "photo_path": student[3],
+            "photo_path": photo_path,
+            "photo_url": photo_url,
+            "photo_endpoint": photo_endpoint,
             "gender": student[4] if len(student) > 4 else 'M',
             "statistics": {
                 "total_sessions": total_sessions,
