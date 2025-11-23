@@ -292,6 +292,62 @@ async def get_student_photo(student_id: int):
     # Détecter le content-type
     mime_type, _ = mimetypes.guess_type(abs_path)
     return FileResponse(abs_path, media_type=mime_type or 'image/jpeg')
+@app.get("/api/students/email/{email}")
+async def get_student_by_email(email: str, request: Request):
+    conn = sqlite3.connect(db.db_name)
+    c = conn.cursor()
+    # Recherche insensible à la casse
+    c.execute('SELECT id, first_name, last_name, photo_path, gender FROM students WHERE LOWER(email)=LOWER(?)', (email,))
+    student = c.fetchone()
+    if not student:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Étudiant introuvable")
+
+    c.execute('''
+        SELECT COUNT(*) as total_sessions,
+               SUM(CASE WHEN a.student_id IS NOT NULL THEN 1 ELSE 0 END) as attended
+        FROM sessions s
+        LEFT JOIN attendance a ON s.id = a.session_id AND a.student_id = ?
+    ''', (student[0],))
+    stats = c.fetchone()
+    conn.close()
+
+    total_sessions = stats[0] if stats and stats[0] else 0
+    attended = stats[1] if stats and stats[1] else 0
+    absence_rate = ((total_sessions - attended) / total_sessions * 100) if total_sessions > 0 else 0
+
+    photo_path = student[3]
+    photo_url = None
+    photo_endpoint = f"{str(request.base_url).rstrip('/')}/api/students/{student[0]}/photo"
+
+    if photo_path:
+        normalized = photo_path.replace('\\', '/')
+        if normalized.startswith('students_photos/'):
+            filename = normalized.split('/', 1)[1]
+            photo_url = f"{str(request.base_url).rstrip('/')}/students_photos/{filename}"
+        elif normalized.startswith('./students_photos/'):
+            filename = normalized.split('/', 2)[2]
+            photo_url = f"{str(request.base_url).rstrip('/')}/students_photos/{filename}"
+
+    return {
+        "success": True,
+        "data": {
+            "id": student[0],
+            "first_name": student[1],
+            "last_name": student[2],
+            "photo_path": photo_path,
+            "photo_url": photo_url,
+            "photo_endpoint": photo_endpoint,
+            "gender": student[4] if len(student) > 4 else 'M',
+            "statistics": {
+                "total_sessions": total_sessions,
+                "attended": attended,
+                "absent": total_sessions - attended,
+                "attendance_rate": round(100 - absence_rate, 2),
+                "absence_rate": round(absence_rate, 2)
+            }
+        }
+    }
 
 
 # ==================== ENDPOINTS SÉANCES ====================
