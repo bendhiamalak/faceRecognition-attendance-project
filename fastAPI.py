@@ -240,7 +240,7 @@ async def get_student(student_id: int, request: Request):
     absence_rate = ((total_sessions - attended) / total_sessions * 100) if total_sessions > 0 else 0
 
     # Construire les URLs utiles pour le front
-    photo_path = student[3]
+    photo_path = student[4]
     photo_url = None
     photo_endpoint = f"{str(request.base_url).rstrip('/')}/api/students/{student_id}/photo"
 
@@ -261,10 +261,10 @@ async def get_student(student_id: int, request: Request):
             "id": student[0],
             "first_name": student[1],
             "last_name": student[2],
+            "email": student[3],
             "photo_path": photo_path,
-            "photo_url": photo_url,
             "photo_endpoint": photo_endpoint,
-            "gender": student[4] if len(student) > 4 else 'M',
+            "gender": student[5] if len(student) > 4 else 'M',
             "statistics": {
                 "total_sessions": total_sessions,
                 "attended": attended,
@@ -304,8 +304,9 @@ async def get_student_by_email(email: str, request: Request):
     conn = sqlite3.connect(db.db_name)
     c = conn.cursor()
     # Recherche insensible à la casse
-    c.execute('SELECT id, first_name, last_name, photo_path, gender FROM students WHERE LOWER(email)=LOWER(?)', (email,))
+    c.execute('SELECT id, first_name, last_name,email, photo_path, gender FROM students WHERE LOWER(email)=LOWER(?)', (email,))
     student = c.fetchone()
+    print(student)
     if not student:
         conn.close()
         raise HTTPException(status_code=404, detail="Étudiant introuvable")
@@ -323,7 +324,7 @@ async def get_student_by_email(email: str, request: Request):
     attended = stats[1] if stats and stats[1] else 0
     absence_rate = ((total_sessions - attended) / total_sessions * 100) if total_sessions > 0 else 0
 
-    photo_path = student[3]
+    photo_path = student[4]
     photo_url = None
     photo_endpoint = f"{str(request.base_url).rstrip('/')}/api/students/{student[0]}/photo"
 
@@ -342,10 +343,10 @@ async def get_student_by_email(email: str, request: Request):
             "id": student[0],
             "first_name": student[1],
             "last_name": student[2],
+            "email": student[3],
             "photo_path": photo_path,
-            "photo_url": photo_url,
             "photo_endpoint": photo_endpoint,
-            "gender": student[4] if len(student) > 4 else 'M',
+            "gender": student[5] if len(student) > 4 else 'M',
             "statistics": {
                 "total_sessions": total_sessions,
                 "attended": attended,
@@ -353,6 +354,45 @@ async def get_student_by_email(email: str, request: Request):
                 "attendance_rate": round(100 - absence_rate, 2),
                 "absence_rate": round(absence_rate, 2)
             }
+        }
+    }
+
+@app.delete("/api/students/{student_id}")
+async def delete_student(student_id: int):
+    """Supprime un étudiant de la base et le fichier photo associé si présent."""
+    # Supprimer de la DB (retourne photo_path si existait)
+    deleted, photo_path = db.remove_student(student_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Étudiant introuvable")
+
+    photo_deleted = False
+    if photo_path:
+        # Construire le chemin absolu
+        if not os.path.isabs(photo_path):
+            abs_path = os.path.join(base_dir, photo_path)
+        else:
+            abs_path = photo_path
+        try:
+            if os.path.exists(abs_path):
+                os.remove(abs_path)
+                photo_deleted = True
+        except Exception as e:
+            # Ne pas échouer la suppression DB si la suppression fichier plante; loguer
+            print(f"⚠ Impossible de supprimer le fichier photo '{abs_path}': {e}")
+
+    # Recharger les encodages connus
+    try:
+        detector.load_encodings_from_database(db)
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "message": "Étudiant supprimé avec succès",
+        "data": {
+            "student_id": student_id,
+            "photo_path": photo_path,
+            "photo_deleted": photo_deleted
         }
     }
 

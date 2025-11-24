@@ -179,6 +179,34 @@ class AttendanceDatabase:
         conn.close()
         return student
 
+    def remove_student(self, student_id):
+        """Supprime un étudiant par id.
+        Retourne (True, photo_path) si supprimé, (False, None) si inexistant.
+        La suppression ne touche que la base; la suppression du fichier photo peut être faite par l'API.
+        """
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute('SELECT photo_path FROM students WHERE id = ?', (student_id,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return False, None
+        photo_path = row[0]
+        try:
+            # Supprimer d'abord les présences liées pour éviter les références orphelines
+            try:
+                c.execute('DELETE FROM attendance WHERE student_id = ?', (student_id,))
+            except Exception:
+                pass
+            c.execute('DELETE FROM students WHERE id = ?', (student_id,))
+            conn.commit()
+            return True, photo_path
+        except Exception as e:
+            print(f"✗ Erreur lors de la suppression de l'étudiant: {e}")
+            return False, photo_path
+        finally:
+            conn.close()
+
     def get_all_students(self):
         """Récupère tous les étudiants"""
         conn = sqlite3.connect(self.db_name)
