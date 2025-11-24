@@ -53,6 +53,7 @@ class ProfessorCreate(BaseModel):
 class StudentCreate(BaseModel):
     first_name: str
     last_name: str
+    email: str
     gender: str = 'M'
     photo_base64: str = None
 
@@ -135,9 +136,14 @@ async def get_professor(professor_id: int):
 async def create_student(student: StudentCreate):
     print("oyyyyyyyyyy")
     print(student)
-    if not all([student.first_name, student.last_name]):
-        raise HTTPException(status_code=400, detail="Le prénom et le nom sont obligatoires")
-    
+    if not all([student.first_name, student.last_name, student.email]):
+        raise HTTPException(status_code=400, detail="Le prénom, le nom et l'email sont obligatoires")
+
+    # Vérifier unicité email
+    existing = db.get_student_by_email(student.email)
+    if existing:
+        raise HTTPException(status_code=400, detail="Un étudiant avec cet email existe déjà")
+
     photo_path = None
     encoding = None
     print(student)
@@ -169,19 +175,18 @@ async def create_student(student: StudentCreate):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Erreur traitement photo: {str(e)}")
 
-    student_id = db.add_student(student.first_name, student.last_name, photo_path, encoding)
+    student_id = db.add_student(student.first_name, student.last_name, student.email, photo_path, encoding, student.gender)
 
     if student_id:
-        # Mettre à jour le genre
-        conn = sqlite3.connect(db.db_name)
-        c = conn.cursor()
+        # Assurer que le champ gender est mis (même si la DB a déjà la colonne)
         try:
-            c.execute('ALTER TABLE students ADD COLUMN gender TEXT DEFAULT "M"')
-        except:
+            conn = sqlite3.connect(db.db_name)
+            c = conn.cursor()
+            c.execute('UPDATE students SET gender=? WHERE id=?', (student.gender, student_id))
+            conn.commit()
+            conn.close()
+        except Exception:
             pass
-        c.execute('UPDATE students SET gender=? WHERE id=?', (student.gender, student_id))
-        conn.commit()
-        conn.close()
 
         detector.load_encodings_from_database(db)
 
@@ -194,13 +199,15 @@ async def create_student(student: StudentCreate):
                 "last_name": student.last_name,
                 "gender": student.gender,
                 "photo_path": photo_path,
-                "has_encoding": encoding is not None
+                "has_encoding": encoding is not None,
+                "email": student.email
             }
         }
     raise HTTPException(status_code=500, detail="Erreur création étudiant")
 
 @app.get("/api/students")
 async def get_students():
+    print("hehehheheh")
     conn = sqlite3.connect(db.db_name)
     c = conn.cursor()
     c.execute('SELECT id, first_name, last_name, photo_path, gender FROM students ORDER BY last_name')

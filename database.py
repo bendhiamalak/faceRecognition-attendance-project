@@ -19,6 +19,7 @@ class AttendanceDatabase:
             last_name TEXT NOT NULL,
             subject TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
+            gender TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         
@@ -27,7 +28,9 @@ class AttendanceDatabase:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
             photo_path TEXT,
+            gender TEXT,
             encoding BLOB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
@@ -67,10 +70,26 @@ class AttendanceDatabase:
                 print(f"⚠ Impossible d'ajouter la colonne 'email': {e}")
         # Créer un index UNIQUE si non présent (permet d'imposer l'unicité sur les valeurs non-null)
         try:
-            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_email ON professors(email);")
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_professors_email ON professors(email)")
             conn.commit()
         except Exception as e:
             print(f"⚠ Impossible de créer l'index unique sur email: {e}")
+
+        # --- Migration: assurer que students a bien une colonne email et un index unique ---
+        c.execute("PRAGMA table_info('students')")
+        student_cols = [row[1] for row in c.fetchall()]
+        if 'email' not in student_cols:
+            try:
+                c.execute("ALTER TABLE students ADD COLUMN email TEXT")
+                conn.commit()
+                print("→ Colonne 'email' ajoutée à la table students (migration)")
+            except Exception as e:
+                print(f"⚠ Impossible d'ajouter la colonne 'email' à students: {e}")
+        try:
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_email ON students(email)")
+            conn.commit()
+        except Exception as e:
+            print(f"⚠ Impossible de créer l'index unique sur students.email: {e}")
 
         conn.close()
         print("✓ Base de données initialisée avec succès")
@@ -116,27 +135,50 @@ class AttendanceDatabase:
         return prof
 
     # === GESTION ÉTUDIANTS ===
-    def add_student(self, first_name, last_name, photo_path=None, encoding=None):
-        """Ajoute un étudiant"""
+    def add_student(self, first_name, last_name, email, photo_path=None, encoding=None, gender=None):
+        """Ajoute un étudiant. Email est requis et doit être unique."""
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
         try:
             # Convertir l'encoding en bytes si fourni
             encoding_blob = pickle.dumps(encoding) if encoding is not None else None
-            
-            c.execute('''INSERT INTO students (first_name, last_name, photo_path, encoding)
-                        VALUES (?, ?, ?, ?)''', 
-                     (first_name, last_name, photo_path, encoding_blob))
+
+            # Spécifier explicitement les colonnes pour être compatible avec les migrations
+            c.execute('''INSERT INTO students (first_name, last_name, email, photo_path, gender, encoding)
+                        VALUES (?, ?, ?, ?, ?, ?)''',
+                     (first_name, last_name, email, photo_path, gender, encoding_blob))
             conn.commit()
             student_id = c.lastrowid
             print(f"✓ Étudiant {first_name} {last_name} ajouté avec ID: {student_id}")
             return student_id
+        except sqlite3.IntegrityError as ie:
+            # Erreur d'unicité (email déjà existant)
+            print(f"✗ Intégrité DB lors de l'ajout de l'étudiant (possible email dupliqué): {ie}")
+            return None
         except Exception as e:
             print(f"✗ Erreur lors de l'ajout de l'étudiant: {e}")
             return None
         finally:
             conn.close()
-    
+
+    def get_student_by_email(self, email):
+        """Récupère un étudiant par email (ou None)"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute('SELECT * FROM students WHERE email = ? LIMIT 1', (email,))
+        student = c.fetchone()
+        conn.close()
+        return student
+
+    def get_student_by_id(self, student_id):
+        """Récupère un étudiant par id (ou None)"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute('SELECT * FROM students WHERE id = ? LIMIT 1', (student_id,))
+        student = c.fetchone()
+        conn.close()
+        return student
+
     def get_all_students(self):
         """Récupère tous les étudiants"""
         conn = sqlite3.connect(self.db_name)
