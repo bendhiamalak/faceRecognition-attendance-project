@@ -1,6 +1,7 @@
 """
 API REST pour le Système de Gestion de Présence par Reconnaissance Faciale
 Endpoints pour application mobile - FastAPI
+run with "uvicorn main:app --reload --host 0.0.0.0 --port 9000"
 """
 
 from fastapi import FastAPI, HTTPException, Request
