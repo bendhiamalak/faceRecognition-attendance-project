@@ -318,11 +318,9 @@ class AttendanceDatabase:
             conn.commit()
 
             if c.rowcount > 0:
-                print(f"✓ Présence marquée pour l'étudiant ID: {student_id}")
-                return (True, "Présence marquée pour l'étudiant ID: " + student_id)
+                return (True, "Présence marquée pour l'étudiant ID: " + str(student_id))
             else:
-                print(f"⚠ Présence déjà marquée pour l'étudiant ID: {student_id}")
-                return (False, "Présence déjà marquée pour l'étudiant ID : " + student_id)
+                return (False, "Présence déjà marquée pour l'étudiant ID : " + str(student_id))
         except Exception as e:
             print(f"✗ Erreur lors du marquage de présence: {e}")
             return (False, null)
