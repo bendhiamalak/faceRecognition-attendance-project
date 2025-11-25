@@ -304,7 +304,31 @@ class AttendanceDatabase:
             return False
         finally:
             conn.close()
-    
+
+    def mark_attendance_socketIO(self, session_id, student_id, null=None):
+        """Marque la présence d'un étudiant"""
+        check_in_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        try:
+            c.execute('''INSERT OR IGNORE INTO attendance (session_id, student_id, check_in_time)
+                        VALUES (?, ?, ?)''',
+                      (session_id, student_id, check_in_time))
+            conn.commit()
+
+            if c.rowcount > 0:
+                print(f"✓ Présence marquée pour l'étudiant ID: {student_id}")
+                return (True, "Présence marquée pour l'étudiant ID: " + student_id)
+            else:
+                print(f"⚠ Présence déjà marquée pour l'étudiant ID: {student_id}")
+                return (False, "Présence déjà marquée pour l'étudiant ID : " + student_id)
+        except Exception as e:
+            print(f"✗ Erreur lors du marquage de présence: {e}")
+            return (False, null)
+        finally:
+            conn.close()
+
     def export_attendance_to_csv(self, session_id, filename='attendance_report.csv'):
         """Export les présences d'une séance en CSV"""
         conn = sqlite3.connect(self.db_name)
