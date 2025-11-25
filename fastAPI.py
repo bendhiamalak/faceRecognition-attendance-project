@@ -128,6 +128,30 @@ async def get_professor(professor_id: int):
             "created_at": professor[5]
         }
     }
+@app.get("/api/professors/email/{email}")
+async def get_professor_by_email(email: str):
+    conn = sqlite3.connect(db.db_name)
+    c = conn.cursor()
+    # Recherche insensible à la casse
+    c.execute('SELECT id, first_name, last_name, subject, email, gender, created_at FROM professors WHERE LOWER(email)=LOWER(?)', (email,))
+    professor = c.fetchone()
+    conn.close()
+
+    if not professor:
+        raise HTTPException(status_code=404, detail="Professeur introuvable")
+
+    return {
+        "success": True,
+        "data": {
+            "id": professor[0],
+            "first_name": professor[1],
+            "last_name": professor[2],
+            "subject": professor[3],
+            "email": professor[4],
+            "gender": professor[5] if len(professor) > 5 else None,
+            "created_at": professor[6] if len(professor) > 6 else None
+        }
+    }
 
 
 # ==================== ENDPOINTS ÉTUDIANTS ====================
