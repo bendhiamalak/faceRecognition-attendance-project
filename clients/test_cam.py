@@ -1,13 +1,20 @@
-# run with "python clients/test_cam.py --url http://127.0.0.1:5000 --camera 0 --fps 1 --professor-id 1"
+# run with " python clients/test_cam.py --url 192.168.100.190:5000 --camera 0 --fps 1 --professor-id 1"
 import argparse
 import base64
 import time
 import signal
 import sys
-
+from urllib.parse import urlparse
 import cv2
 import socketio
-
+def normalize_url(url: str) -> str:
+    # Ajouter un schéma par défaut si absent
+    if not url.startswith(('http://', 'https://', 'ws://', 'wss://')):
+        url = 'http://' + url
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        raise ValueError(f"URL invalide: {url}")
+    return url
 
 def parse_args():
     p = argparse.ArgumentParser(description='Test camera -> send frames to Socket.IO server')
@@ -184,6 +191,14 @@ class TestCamSender:
 
 if __name__ == '__main__':
     args = parse_args()
+
+    # Normaliser automatiquement l'URL fournie par l'utilisateur (ajoute http:// si absent)
+    try:
+        args.url = normalize_url(args.url)
+    except ValueError as e:
+        print(f"[client] URL invalide: {e}")
+        sys.exit(1)
+
     sender = TestCamSender(url=args.url, camera_index=args.camera, fps=args.fps, professor_id=args.professor_id)
 
     # handle SIGINT gracefully
