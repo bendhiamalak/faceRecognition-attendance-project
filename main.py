@@ -259,6 +259,75 @@ class AttendanceSystem:
                 import traceback
                 traceback.print_exc()
 
+def _init_detector_singleton():
+    """
+    Initialise un détecteur et une instance de DB partagés pour l'API server.
+    Appelé paresseusement par run_detection().
+    """
+    global _DETECTOR_SINGLETON, _DB_SINGLETON
+    try:
+        _DETECTOR_SINGLETON
+    except NameError:
+        _DETECTOR_SINGLETON = None
+    try:
+        _DB_SINGLETON
+    except NameError:
+        _DB_SINGLETON = None
+
+    if _DETECTOR_SINGLETON is None:
+        try:
+            from database import AttendanceDatabase
+            from face_detector import FaceDetector
+            _DB_SINGLETON = AttendanceDatabase()
+            _DETECTOR_SINGLETON = FaceDetector(tolerance=0.5)
+            # Charger les encodages si disponibles
+            try:
+                _DETECTOR_SINGLETON.load_encodings_from_database(_DB_SINGLETON)
+            except Exception:
+                # Ne pas échouer si la DB n'a pas d'encodages
+                pass
+        except Exception:
+            # En cas d'erreur, laisser la variable None et laisser run_detection gérer l'erreur
+            _DETECTOR_SINGLETON = None
+            _DB_SINGLETON = None
+
+    return _DETECTOR_SINGLETON, _DB_SINGLETON
+
+
+def run_detection(frame):
+    """
+    Entrypoint simple pour le serveur.
+    - frame: image OpenCV (BGR) en numpy.ndarray
+    Retourne un dict sérialisable contenant les détections.
+
+    Format de sortie attendu : { "faces": [ { student_id, name, location, confidence }, ... ], "count": N }
+    En cas d'erreur retourne { "error": "..." }
+    """
+    try:
+        detector, db = _init_detector_singleton()
+        if detector is None:
+            return {"error": "Detector not initialized"}
+
+        detected = detector.detect_faces_in_frame(frame)
+
+        faces = []
+        for d in detected:
+            student = d.get('student', {}) or {}
+            faces.append({
+                'student_id': student.get('id'),
+                'name': student.get('name'),
+                'location': d.get('location'),
+                'confidence': float(d.get('confidence', 0.0))
+            })
+
+        return { 'faces': faces, 'count': len(faces) }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return { 'error': str(e) }
+
+
 def main():
     """Point d'entrée de l'application"""
     try:
