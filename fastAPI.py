@@ -559,6 +559,62 @@ async def detect_and_mark_attendance(data: DetectAttendance):
         }
     }
 
+# python
+@app.get("/api/sessions/professor/{professor_id}")
+async def get_sessions_by_professor(professor_id: int):
+    conn = sqlite3.connect(db.db_name)
+    c = conn.cursor()
+    c.execute('''
+        SELECT s.id, s.professor_id, p.first_name, p.last_name,
+               s.subject, s.session_date, s.start_time, s.end_time
+        FROM sessions s
+        LEFT JOIN professors p ON s.professor_id = p.id
+        WHERE s.professor_id = ?
+        ORDER BY s.session_date DESC, s.start_time DESC
+    ''', (professor_id,))
+    sessions = c.fetchall()
+
+    result = []
+    for s in sessions:
+        session_id = s[0]
+        print("session id :", session_id)
+        # Récupérer les étudiants présents pour cette séance
+        c.execute('''
+            SELECT st.id, st.first_name, st.last_name, st.email
+            FROM attendance a
+            JOIN students st ON a.student_id = st.id
+            WHERE a.session_id = ?
+            ORDER BY st.last_name, st.first_name
+        ''', (session_id,))
+        present_rows = c.fetchall()
+        print("presents rows:", present_rows)
+        present_students = [
+            {
+                "id": r[0],
+                "first_name": r[1],
+                "last_name": r[2],
+                "email": r[3] if len(r) > 3 else None
+            } for r in present_rows
+        ]
+
+        result.append({
+            "session_id": session_id,
+            "professor_id": s[1],
+            "professor_name": f"{s[2]} {s[3]}" if s[2] else "N/A",
+            "subject": s[4],
+            "date": s[5],
+            "start_time": s[6],
+            "end_time": s[7],
+            "status": "terminée" if s[7] else "en cours",
+            "present_students": present_students
+        })
+
+    conn.close()
+    return {
+        "success": True,
+        "data": result,
+        "count": len(result)
+    }
 
 # ==================== STATISTIQUES AVANCÉES ====================
 
